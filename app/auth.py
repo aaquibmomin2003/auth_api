@@ -29,7 +29,7 @@ def verify_password(
     )
 
 
-def create_access_token(data: dict):
+def create_access_token(data : dict):
     to_encode = data.copy()
 
     expire = datetime.utcnow() + timedelta(minutes=30)

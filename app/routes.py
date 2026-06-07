@@ -46,7 +46,16 @@ def get_current_user(
 
     return user
 
+def get_current_admin(
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required"
+        )
 
+    return current_user
 @router.post("/register")
 def register(
     user: UserCreate,
@@ -123,5 +132,69 @@ def get_me(
 ):
     return {
         "id": current_user.id,
-        "email": current_user.email
+        "email": current_user.email,
+        "role": current_user.role
+    }
+    
+@router.get("/admin/users")
+def get_all_users(
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    users = db.query(User).all()
+    return [
+        {
+            "id": user.id,
+            "email": user.email,
+            "role": user.role
+        }
+        for user in users
+    ]
+    
+@router.get("/admin/users/{user_id}")
+def get_user_by_id(
+    user_id:int,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    user = (
+        db.query(User)
+        .filter(User.id ==user_id)
+        .first()
+    )
+    
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+    return {
+        "id": user.id,
+        "email": user.email,
+        "role": user.role
+    }
+    
+@router.delete("/admin/users/{user_id}")
+def delete_user(
+    user_id:int,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    user = (
+        db.query(User)
+        .filter(User.id ==user_id)
+        .first()
+    )
+    
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+    
+    db.delete(user)
+    db.commit()
+    
+    return {
+        "message": "User deleted successfully"
     }
