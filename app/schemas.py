@@ -8,3 +8,7 @@ class UserLogin(BaseModel):
 
 class RoleUpdate(BaseModel):
     role: str
+    
+class NoteCreate(BaseModel):
+    title: str
+    content: str

@@ -3,11 +3,12 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import User
+from .models import User , Note
 from .schemas import (
     UserCreate,
     UserLogin,
-    RoleUpdate
+    RoleUpdate,
+    NoteCreate
 )
 from .auth import (
     hash_password,
@@ -240,3 +241,50 @@ def update_user_role(
             "role": user.role
         }
     }
+    
+@router.post("/notes")
+def create_note(
+    note : NoteCreate,
+    current_user : User = Depends(get_current_user),
+    db : Session = Depends(get_db)
+    
+):
+    new_note = Note(
+        title = note.title,
+        content=note.content,
+        owner_id = current_user.id
+    )
+    db.add(new_note)
+    db.commit()
+    db.refresh(new_note)
+    return {
+        "message" : "Note created successfully",
+        "note":{
+            "id": new_note.id,
+            "title": new_note.title,
+            "content": new_note.content,
+            "owner_id": new_note.owner_id
+        }
+    }
+    
+@router.get("/notes")
+def get_my_notes(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    notes = (
+        db.query(Note)
+        .filter(
+            Note.owner_id == current_user.id
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": note.id,
+            "title": note.title,
+            "content": note.content
+        }
+        for note in notes
+    ] 
