@@ -8,7 +8,9 @@ from .schemas import (
     UserCreate,
     UserLogin,
     RoleUpdate,
-    NoteCreate
+    NoteCreate,
+    UserResponse,
+    NoteResponse
 )
 from .auth import (
     hash_password,
@@ -131,15 +133,14 @@ def login(
     }
 
 
-@router.get("/me")
+@router.get(
+    "/me",
+    response_model=UserResponse
+)
 def get_me(
     current_user: User = Depends(get_current_user)
 ):
-    return {
-        "id": current_user.id,
-        "email": current_user.email,
-        "role": current_user.role
-    }
+    return current_user
     
 @router.get("/admin/users")
 def get_all_users(
@@ -156,28 +157,28 @@ def get_all_users(
         for user in users
     ]
     
-@router.get("/admin/users/{user_id}")
+@router.get(
+    "/admin/users/{user_id}",
+    response_model=UserResponse
+)
 def get_user_by_id(
-    user_id:int,
+    user_id: int,
     admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     user = (
         db.query(User)
-        .filter(User.id ==user_id)
+        .filter(User.id == user_id)
         .first()
     )
-    
+
     if not user:
         raise HTTPException(
             status_code=404,
             detail="User not found"
         )
-    return {
-        "id": user.id,
-        "email": user.email,
-        "role": user.role
-    }
+
+    return user
     
 @router.delete("/admin/users/{user_id}")
 def delete_user(
@@ -267,7 +268,10 @@ def create_note(
         }
     }
     
-@router.get("/notes")
+@router.get(
+    "/notes",
+    response_model=list[NoteResponse]
+)
 def get_my_notes(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -280,11 +284,69 @@ def get_my_notes(
         .all()
     )
 
-    return [
-        {
-            "id": note.id,
-            "title": note.title,
-            "content": note.content
-        }
-        for note in notes
-    ] 
+    return notes
+    
+@router.put("/notes/{note_id}")
+def update_note(
+    note_id: int,
+    note: NoteCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    db_note = (
+        db.query(Note)
+        .filter(Note.id == note_id)
+        .first()
+    )
+
+    if not db_note:
+        raise HTTPException(
+            status_code=404,
+            detail="Note not found"
+        )
+
+    if db_note.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Not allowed"
+        )
+
+    db_note.title = note.title
+    db_note.content = note.content
+
+    db.commit()
+    db.refresh(db_note)
+
+    return {
+        "message": "Note updated successfully"
+    }
+@router.delete("/notes/{note_id}")
+def delete_note(
+    note_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    db_note = (
+        db.query(Note)
+        .filter(Note.id == note_id)
+        .first()
+    )
+
+    if not db_note:
+        raise HTTPException(
+            status_code=404,
+            detail="Note not found"
+        )
+
+    if db_note.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Not allowed"
+        )
+
+    db.delete(db_note)
+    db.commit()
+
+    return {
+        "message": "Note deleted successfully"
+    }

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Notes</title>
+</head>
+<body>
+
+<h2>My Notes</h2>
+
+<button onclick="loadNotes()">
+    Load Notes
+</button>
+
+<ul id="notes"></ul>
+
+<script>
+
+async function loadNotes() {
+
+    const token =
+        localStorage.getItem("token");
+
+    const response = await fetch(
+        "http://127.0.0.1:8000/notes",
+        {
+            headers: {
+                Authorization:
+                    `Bearer ${token}`
+            }
+        }
+    );
+
+    const notes =
+        await response.json();
+
+    const notesList =
+        document.getElementById("notes");
+
+    notesList.innerHTML = "";
+
+    notes.forEach(note => {
+
+        notesList.innerHTML += `
+            <li>
+                <b>${note.title}</b>
+                <br>
+                ${note.content}
+            </li>
+        `;
+    });
+}
+
+</script>
+
+</body>
+</html>
