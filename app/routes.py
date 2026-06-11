@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from fastapi import Query
+from typing import Literal
 
 from .database import get_db
 from .models import User , Note
@@ -142,21 +144,59 @@ def get_me(
 ):
     return current_user
     
-@router.get("/admin/users")
+@router.get(
+    "/admin/users",
+    response_model=list[UserResponse]
+)
 def get_all_users(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    search: str | None = None,
+    role: str | None = None,
+    sort_by: str = "id",
+    order: str = "asc",
     admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    users = db.query(User).all()
-    return [
-        {
-            "id": user.id,
-            "email": user.email,
-            "role": user.role
-        }
-        for user in users
-    ]
-    
+    query = db.query(User)
+
+    # Search by email
+    if search:
+        query = query.filter(
+            User.email.ilike(f"%{search}%")
+        )
+
+    # Filter by role
+    if role:
+        query = query.filter(
+            User.role == role
+        )
+
+    # Sorting column
+    if sort_by == "email":
+        sort_column = User.email
+    else:
+        sort_column = User.id
+
+    # Sorting order
+    if order == "desc":
+        query = query.order_by(
+            sort_column.desc()
+        )
+    else:
+        query = query.order_by(
+            sort_column.asc()
+        )
+
+    # Pagination
+    users = (
+        query
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    return users
 @router.get(
     "/admin/users/{user_id}",
     response_model=UserResponse
@@ -242,7 +282,25 @@ def update_user_role(
             "role": user.role
         }
     }
-    
+
+@router.get(
+    "/notes",
+    response_model=list[NoteResponse]
+)
+def get_notes(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    notes = (
+        db.query(Note)
+        .filter(
+            Note.owner_id == current_user.id
+        )
+        .all()
+    )
+
+    return notes
+
 @router.post("/notes")
 def create_note(
     note : NoteCreate,
@@ -267,25 +325,58 @@ def create_note(
             "owner_id": new_note.owner_id
         }
     }
-    
+
 @router.get(
-    "/notes",
-    response_model=list[NoteResponse]
+    "/notes/{note_id}",
+    response_model=NoteResponse
 )
-def get_my_notes(
+def get_note_by_id(
+    note_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    notes = (
+    note = (
         db.query(Note)
         .filter(
+            Note.id == note_id,
             Note.owner_id == current_user.id
         )
-        .all()
+        .first()
     )
 
-    return notes
-    
+    if not note:
+        raise HTTPException(
+            status_code=404,
+            detail="Note not found"
+        )
+
+    return note
+
+# @router.get("/notes/{note_id}" , response_model=NoteResponse)
+# def get_note_by_id(
+#     note_id: int,
+#     current_user: User = Depends(get_current_user),
+#     db: Session = Depends(get_db)
+# ):
+#     note = (
+#         db.query(Note)
+#         .filter(Note.id == note_id)
+#         .first()
+#     )
+
+#     if not note:
+#         raise HTTPException(
+#             status_code=404,
+#             detail="Note not found"
+#         )
+
+#     if note.owner_id != current_user.id:
+#         raise HTTPException(
+#             status_code=403,
+#             detail="Not allowed"
+#         )
+
+#     return note
 @router.put("/notes/{note_id}")
 def update_note(
     note_id: int,
