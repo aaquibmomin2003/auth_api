@@ -39,3 +39,20 @@ class NoteResponse(BaseModel):
 
     class Config:
         from_attributes = True
+        
+class OwnerResponse(BaseModel):
+    id: int
+    email: EmailStr
+
+    class Config:
+        from_attributes = True
+
+class NoteWithOwnerResponse(BaseModel):
+    id: int
+    title: str
+    content: str
+
+    owner: OwnerResponse
+
+    class Config:
+        from_attributes = True

@@ -1,9 +1,15 @@
+from .services.note_service import (
+    create_note as create_note_service,
+        get_notes as get_notes_service,
+        get_note_by_id as get_note_by_id_service,
+        update_note as update_note_service,
+        delete_note as delete_note_service
+)
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from fastapi import Query
 from typing import Literal
-
 from .database import get_db
 from .models import User , Note
 from .schemas import (
@@ -12,7 +18,9 @@ from .schemas import (
     RoleUpdate,
     NoteCreate,
     UserResponse,
-    NoteResponse
+    NoteResponse,
+    OwnerResponse,
+    NoteWithOwnerResponse
 )
 from .auth import (
     hash_password,
@@ -20,15 +28,13 @@ from .auth import (
     create_access_token,
     verify_token
 )
+
 from fastapi.security import OAuth2PasswordRequestForm
-
 router = APIRouter()
-
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="login"
+    
 )
-
-
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
@@ -52,7 +58,6 @@ def get_current_user(
             status_code=401,
             detail="User not found"
         )
-
     return user
 
 def get_current_admin(
@@ -70,6 +75,7 @@ def register(
     user: UserCreate,
     db: Session = Depends(get_db)
 ):
+    
     existing_user = (
         db.query(User)
         .filter(User.email == user.email)
@@ -86,7 +92,6 @@ def register(
         email=user.email,
         password=hash_password(user.password)
     )
-
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -133,8 +138,6 @@ def login(
         "access_token": access_token,
         "token_type": "bearer"
     }
-
-
 @router.get(
     "/me",
     response_model=UserResponse
@@ -217,9 +220,7 @@ def get_user_by_id(
             status_code=404,
             detail="User not found"
         )
-
     return user
-    
 @router.delete("/admin/users/{user_id}")
 def delete_user(
     user_id:int,
@@ -256,7 +257,7 @@ def update_user_role(
         .filter(User.id == user_id)
         .first()
     )
-
+    
     if not user:
         raise HTTPException(
             status_code=404,
@@ -291,34 +292,26 @@ def get_notes(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    notes = (
-        db.query(Note)
-        .filter(
-            Note.owner_id == current_user.id
-        )
-        .all()
+    return get_notes_service(
+        user_id=current_user.id,
+        db=db
     )
-
-    return notes
-
 @router.post("/notes")
 def create_note(
-    note : NoteCreate,
-    current_user : User = Depends(get_current_user),
-    db : Session = Depends(get_db)
-    
+    note: NoteCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    new_note = Note(
-        title = note.title,
+    new_note = create_note_service(
+        title=note.title,
         content=note.content,
-        owner_id = current_user.id
+        user_id=current_user.id,
+        db=db
     )
-    db.add(new_note)
-    db.commit()
-    db.refresh(new_note)
+
     return {
-        "message" : "Note created successfully",
-        "note":{
+        "message": "Note created successfully",
+        "note": {
             "id": new_note.id,
             "title": new_note.title,
             "content": new_note.content,
@@ -331,6 +324,28 @@ def create_note(
     response_model=NoteResponse
 )
 def get_note_by_id(
+    note_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    note = get_note_by_id_service(
+        note_id=note_id,
+        user_id=current_user.id,
+        db=db
+    )
+
+    if not note:
+        raise HTTPException(
+            status_code=404,
+            detail="Note not found"
+        )
+
+    return note
+@router.get(
+    "/notes/{note_id}/details",
+    response_model=NoteWithOwnerResponse
+)
+def get_note_details(
     note_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -351,32 +366,6 @@ def get_note_by_id(
         )
 
     return note
-
-# @router.get("/notes/{note_id}" , response_model=NoteResponse)
-# def get_note_by_id(
-#     note_id: int,
-#     current_user: User = Depends(get_current_user),
-#     db: Session = Depends(get_db)
-# ):
-#     note = (
-#         db.query(Note)
-#         .filter(Note.id == note_id)
-#         .first()
-#     )
-
-#     if not note:
-#         raise HTTPException(
-#             status_code=404,
-#             detail="Note not found"
-#         )
-
-#     if note.owner_id != current_user.id:
-#         raise HTTPException(
-#             status_code=403,
-#             detail="Not allowed"
-#         )
-
-#     return note
 @router.put("/notes/{note_id}")
 def update_note(
     note_id: int,
@@ -384,29 +373,19 @@ def update_note(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    db_note = (
-        db.query(Note)
-        .filter(Note.id == note_id)
-        .first()
+    updated_note = update_note_service(
+        note_id=note_id,
+        title=note.title,
+        content=note.content,
+        user_id=current_user.id,
+        db=db
     )
 
-    if not db_note:
+    if not updated_note:
         raise HTTPException(
             status_code=404,
             detail="Note not found"
         )
-
-    if db_note.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="Not allowed"
-        )
-
-    db_note.title = note.title
-    db_note.content = note.content
-
-    db.commit()
-    db.refresh(db_note)
 
     return {
         "message": "Note updated successfully"
@@ -417,27 +396,19 @@ def delete_note(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    db_note = (
-        db.query(Note)
-        .filter(Note.id == note_id)
-        .first()
+    deleted = delete_note_service(
+        note_id=note_id,
+        user_id=current_user.id,
+        db=db
     )
 
-    if not db_note:
+    if not deleted:
         raise HTTPException(
             status_code=404,
             detail="Note not found"
         )
 
-    if db_note.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="Not allowed"
-        )
-
-    db.delete(db_note)
-    db.commit()
-
     return {
         "message": "Note deleted successfully"
     }
+    
