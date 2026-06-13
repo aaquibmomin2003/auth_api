@@ -17,6 +17,10 @@ from .services.user_service import (
     update_user_role as update_user_role_service,
     delete_user as delete_user_service
 )
+from .services.auth_service import (
+    register_user,
+    login_user
+)
 
 from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordBearer
@@ -77,55 +81,28 @@ def register(
     user: UserCreate,
     db: Session = Depends(get_db)
 ):
-    existing_user = (
-        db.query(User)
-        .filter(User.email == user.email)
-        .first()
-    )
-
-    if existing_user:
-        raise BadRequestException("Email already exists")
-
-    new_user = User(
+    register_user(
         email=user.email,
-        password=hash_password(user.password)
+        password=user.password,
+        db=db
     )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
 
     return {
         "message": "User registered successfully"
     }
-
 @router.post("/login")
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    db_user = (
-        db.query(User)
-        .filter(User.email == form_data.username)
-        .first()
-    )
-
-    if not db_user:
-        raise UnauthorizedException("Invalid credentials")
-
-    if not verify_password(
-        form_data.password,
-        db_user.password
-    ):
-        raise UnauthorizedException("Invalid credentials")
-
-    access_token = create_access_token(
-        {
-            "sub": db_user.email
-        }
+    token = login_user(
+        email=form_data.username,
+        password=form_data.password,
+        db=db
     )
 
     return {
-        "access_token": access_token,
+        "access_token": token,
         "token_type": "bearer"
     }
 
