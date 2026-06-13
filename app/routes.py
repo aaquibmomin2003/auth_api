@@ -11,6 +11,13 @@ from .services.note_service import (
     update_note as update_note_service,
     delete_note as delete_note_service
 )
+from .services.user_service import (
+    get_users as get_users_service,
+    get_user_by_id as get_user_by_id_service,
+    update_user_role as update_user_role_service,
+    delete_user as delete_user_service
+)
+
 from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -145,45 +152,15 @@ def get_all_users(
     admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    query = db.query(User)
-
-    # Search by email
-    if search:
-        query = query.filter(
-            User.email.ilike(f"%{search}%")
-        )
-
-    # Filter by role
-    if role:
-        query = query.filter(
-            User.role == role
-        )
-
-    # Sorting column
-    if sort_by == "email":
-        sort_column = User.email
-    else:
-        sort_column = User.id
-
-    # Sorting order
-    if order == "desc":
-        query = query.order_by(
-            sort_column.desc()
-        )
-    else:
-        query = query.order_by(
-            sort_column.asc()
-        )
-
-    # Pagination
-    users = (
-        query
-        .offset(skip)
-        .limit(limit)
-        .all()
+    return get_users_service(
+        skip=skip,
+        limit=limit,
+        search=search,
+        role=role,
+        sort_by=sort_by,
+        order=order,
+        db=db
     )
-
-    return users
 
 @router.get(
     "/admin/users/{user_id}",
@@ -194,11 +171,10 @@ def get_user_by_id(
     admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    user = (
-        db.query(User)
-        .filter(User.id == user_id)
-        .first()
-    )
+    user = get_user_by_id_service(
+    user_id=user_id,
+    db=db
+)
 
     if not user:
         raise NotFoundException("User not found")
@@ -210,18 +186,14 @@ def delete_user(
     admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    user = (
-        db.query(User)
-        .filter(User.id == user_id)
-        .first()
+    deleted = delete_user_service(
+        user_id=user_id,
+        db=db
     )
-    
-    if not user:
+
+    if not deleted:
         raise NotFoundException("User not found")
-    
-    db.delete(user)
-    db.commit()
-    
+
     return {
         "message": "User deleted successfully"
     }
@@ -233,22 +205,21 @@ def update_user_role(
     admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    user = (
-        db.query(User)
-        .filter(User.id == user_id)
-        .first()
-    )
-    
-    if not user:
-        raise NotFoundException("User not found")
-
     if role_data.role not in ["admin", "user"]:
-        raise BadRequestException("Role must be admin or user")
+        raise BadRequestException(
+            "Role must be admin or user"
+        )
 
-    user.role = role_data.role
+    user = update_user_role_service(
+        user_id=user_id,
+        role=role_data.role,
+        db=db
+    )
 
-    db.commit()
-    db.refresh(user)
+    if not user:
+        raise NotFoundException(
+            "User not found"
+        )
 
     return {
         "message": "Role updated successfully",
@@ -258,7 +229,6 @@ def update_user_role(
             "role": user.role
         }
     }
-
 @router.get(
     "/notes",
     response_model=list[NoteResponse]
