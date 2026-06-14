@@ -5,6 +5,7 @@ from .database import Base
 
 import app.models
 
+Base.metadata.create_all(bind=engine)
 from .routes import router
 from fastapi.middleware.cors import CORSMiddleware
 
