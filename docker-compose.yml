@@ -11,6 +11,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     build: .
     container_name: notes-api
@@ -23,5 +29,3 @@ services:
 
 volumes:
   postgres_data:
-healthcheck:
-  test: ["CMD-SHELL", "pg_isready -U postgres"]

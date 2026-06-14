@@ -22,7 +22,6 @@ from .handlers import (
     bad_request_handler
 )
 
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
